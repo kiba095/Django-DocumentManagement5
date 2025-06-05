@@ -1,4 +1,4 @@
-# Django-DocumentManagement2
+# Django-DocumentManagement5
 The principal is member of the commitee so he/she has two accounts
 	
 	user: com1 (the uploader) -> School Head
