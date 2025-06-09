@@ -11,6 +11,7 @@ from .forms import FormSubmissionForm
 from django.core.exceptions import ValidationError
 from django.utils.safestring import mark_safe
 import mimetypes
+from django.http import HttpResponseRedirect
 
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ('recipient','message','created_at','is_read')
@@ -46,18 +47,9 @@ class NotificationAdmin(admin.ModelAdmin):
     
 class MediaFileAdmin(admin.ModelAdmin):
     list_filter = ('status',)
-    actions = ['approve_files','reject_files']
+    actions = ['approve_files','reject_files','view_selected_for_print']
     ordering = ('-uploaded_at',)
     search_fields = ["title","status","media_type",]
-
-
-    #fieldsets = [
-    #    ("Form", {
-    #        "classes": ( "collapse","expanded"),
-    #        "fields": ("title","remarks","file","status","media_type"),
-    #    }),
-    #]
- 
 
     def get_queryset(self,request):
         ''' Show records for respective user only except admin'''
@@ -136,8 +128,8 @@ class MediaFileAdmin(admin.ModelAdmin):
                 message=f"You Document File '{media.title}' was {media.status}"
             )     
 
-    approve_files.short_description = "Approve selected media files"
-    reject_files.short_description = "Reject selected media files"
+    approve_files.short_description = "Approve selected Uploaded Documents"
+    reject_files.short_description = "Reject selected Uploaded Documents"
 
     def get_readonly_fields(self, request, obj =None):
         if not request.user.groups.filter(name="admin_group").first() and not request.user.is_superuser:
@@ -346,14 +338,33 @@ class MediaFileAdmin(admin.ModelAdmin):
 
     custom_decide_page_link.short_description = "Options"
 
+
+    def view_selected_for_print(self,request, queryset):
+        selected_ids = queryset.values_list('pk',flat=True)
+        return HttpResponseRedirect(f'print-preview/?ids={",".join(str(pk) for pk in selected_ids)}')
+    
+    view_selected_for_print.short_description = "View and Print selected Uploaded Documents"
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
             path('decide-page/<int:obj_id>/',custom_decide_page,name="decide_page"),
             path('view-page/<int:obj_id>/',custom_view_page,name="view_page"),
+            path('print-preview/',self.admin_site.admin_view(self.print_preview_view),name='print_preview'),
         ]
         return custom_urls + urls
     
+    def print_preview_view(self,request):
+
+        ids = request.GET.get('ids','')
+        selected_ids = [int(pk) for pk in ids.split(',') if pk.isdigit()]
+        selected_objects = MediaFile.objects.filter(pk__in=selected_ids)
+        context = dict(
+            self.admin_site.each_context(request),
+            selected_objects=selected_objects,
+        )
+        return TemplateResponse(request,"admin/print_preview.html",context)
+
 
 ## MAKES custompage view forms inside the buildin admin dashboard
 def custom_decide_page(request,obj_id):
